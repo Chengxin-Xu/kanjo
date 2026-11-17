@@ -274,6 +274,47 @@ def count_running_agy() -> Optional[int]:
     return len([line for line in (res.stdout or "").splitlines() if line.strip()])
 
 
+def list_running_agy_pids() -> Optional[List[int]]:
+    """PIDs of processes named exactly ``agy`` (None when undeterminable)."""
+    try:
+        res = subprocess.run(
+            ["pgrep", "-x", "agy"], capture_output=True, text=True,
+            errors="replace", check=False,
+        )
+    except Exception:
+        return None
+    if res.returncode not in (0, 1):
+        return None
+    pids = []
+    for line in (res.stdout or "").splitlines():
+        line = line.strip()
+        if line.isdigit():
+            pids.append(int(line))
+    return pids
+
+
+def quit_running_agy(timeout: float = 8.0) -> List[int]:
+    """SIGTERM every running ``agy`` and wait for them to exit.
+
+    Returns the PIDs still alive after ``timeout`` seconds (never SIGKILLs).
+    Injectable for tests via patching ``kanjo.agy_login.quit_running_agy``.
+    """
+    import signal
+
+    pids = list_running_agy_pids() or []
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    deadline = time.time() + timeout
+    alive = pids
+    while alive and time.time() < deadline:
+        time.sleep(0.2)
+        alive = [p for p in (list_running_agy_pids() or []) if p in set(pids)]
+    return alive
+
+
 def _running_agy_field(running_agy: Optional[int]) -> Optional[int]:
     """Resolve the ``running_agy`` value: explicit override, else a live count."""
     if running_agy is not None:
@@ -402,8 +443,14 @@ def switch(
     index=None,
     cache_dir: Optional[str] = None,
     running_agy: Optional[int] = None,
+    quit_running: bool = False,
 ) -> Tuple[int, dict]:
-    """Switch active login slot to target email."""
+    """Switch active login slot to target email.
+
+    With ``quit_running`` every running agy is asked to exit first (they would
+    otherwise write their own login back at their next token refresh). If any
+    refuses to exit, nothing is written.
+    """
     backend = backend or get_backend()
     if backend is None:
         return 1, {"status": "error", "message": "only supported on macOS"}
@@ -412,6 +459,42 @@ def switch(
     if not target:
         return 1, {"status": "error", "message": "email cannot be empty"}
 
+    def _ok_result() -> Tuple[int, dict]:
+        return 0, {
+            "status": "ok",
+            "account": target,
+            "note": _SWITCH_NOTE,
+            "running_agy": _running_agy_field(running_agy),
+            **({"quit_agy": quit_count} if quit_count is not None else {}),
+        }
+
+    def _no_saved_login() -> Tuple[int, dict]:
+        return 1, {
+            "status": "error",
+            "error": "no_saved_login",
+            "message": f"no saved login for {target}",
+        }
+
+    quit_count = None
+    if quit_running:
+        target_bytes = backend.read_saved(target)
+        if not target_bytes:
+            return _no_saved_login()
+        if backend.read_slot() == target_bytes:
+            quit_count = 0
+            return _ok_result()
+        before = list_running_agy_pids()
+        survivors = quit_running_agy()
+        if survivors:
+            return 1, {
+                "status": "error",
+                "error": "agy_still_running",
+                "message": f"{len(survivors)} agy session(s) did not exit; nothing was changed",
+                "running_agy": len(survivors),
+            }
+        quit_count = len(before or [])
+        running_agy = 0
+
     # 1. run sync first (keeps the outgoing account's refreshed token)
     sync(backend, index, cache_dir=cache_dir)
 
@@ -419,12 +502,7 @@ def switch(
     target_bytes = backend.read_saved(target)
     slot_bytes = backend.read_slot()
     if target_bytes and slot_bytes == target_bytes:
-        return 0, {
-            "status": "ok",
-            "account": target,
-            "note": _SWITCH_NOTE,
-            "running_agy": _running_agy_field(running_agy),
-        }
+        return _ok_result()
 
     # 2. if slot owner is unknown and slot is non-empty and differs from every saved copy, refuse
     slot_bytes = backend.read_slot()
@@ -447,11 +525,7 @@ def switch(
     # 3. require a saved copy for EMAIL, else error no_saved_login
     target_bytes = backend.read_saved(target)
     if not target_bytes:
-        return 1, {
-            "status": "error",
-            "error": "no_saved_login",
-            "message": f"no saved login for {target}",
-        }
+        return _no_saved_login()
 
     # 4. write saved bytes into the slot, read back and compare; on mismatch restore
     prev_bytes = slot_bytes
@@ -469,12 +543,7 @@ def switch(
     _record_slot_write(target_bytes, target, cache_dir=cache_dir)
 
     # 5. output
-    return 0, {
-        "status": "ok",
-        "account": target,
-        "note": _SWITCH_NOTE,
-        "running_agy": _running_agy_field(running_agy),
-    }
+    return _ok_result()
 
 
 def list_accounts_login(backend: Optional[KeychainBackend] = None, index=None) -> Tuple[int, dict]:
