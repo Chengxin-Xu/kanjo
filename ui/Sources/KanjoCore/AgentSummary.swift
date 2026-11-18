@@ -30,6 +30,13 @@ public struct AgentProjectOthers: Equatable, Sendable {
     public var share: Double
 }
 
+/// 超出前 8 个模型后合并为「Others (N)」的汇总。
+public struct AgentModelOthers: Equatable, Sendable {
+    public var count: Int
+    public var tokens: Int
+    public var cost: Double
+}
+
 /// Agent 视图单行数据。
 public struct AgentSummaryRow: Equatable, Identifiable {
     public var agent: String
@@ -46,8 +53,10 @@ public struct AgentSummaryRow: Equatable, Identifiable {
     public var quotaRows: [QuotaRow]
     public var perf: PerfSummary?
     public var models: [AgentModelRow]
+    public var othersModel: AgentModelOthers? = nil
     public var projectShares: [AgentProjectShare]
     public var othersProjectShare: AgentProjectOthers?
+    public var antigravityAccountShares: [AntigravityAccountShare]
 
     public var id: String { agent }
 }
@@ -158,19 +167,17 @@ public enum AgentSummary {
             let perf = PerfStats.summarize(report.perfByDay, range: filtered.spec, agent: agent)
             let perfByModel = PerfStats.byModel(report.perfByDay, range: filtered.spec, agent: agent)
 
-            let agentModelRows: [AgentModelRow] = (modelsByAgent[agent] ?? []).map { m in
-                AgentModelRow(
-                    model: m.model,
-                    agent: m.agent,
-                    tokens: m.tokens,
-                    cost: m.cost,
-                    estimated: m.estimated,
-                    cacheHitRate: cacheHitRate(for: m.tokens),
-                    perf: perfByModel[m.model]
-                )
+            let sortedAgentModels = (modelsByAgent[agent] ?? []).sorted { a, b in
+                if a.cost != b.cost { return a.cost > b.cost }
+                if a.tokens.total != b.tokens.total { return a.tokens.total > b.tokens.total }
+                return a.model < b.model
             }
+            let (agentModelRows, othersModel) = buildTopModels(sortedAgentModels, perfByModel: perfByModel)
 
             let (projectShares, others) = buildProjectShares(agent: agent, projects: filtered.projects)
+            let agyAccountShares = agent == "antigravity"
+                ? AntigravityAccountLogic.shares(from: report.antigravityAccounts, range: filtered.spec)
+                : []
             let label = agentLabels[agent] ?? AgentColors.label(for: agent)
 
             rows.append(AgentSummaryRow(
@@ -186,8 +193,10 @@ public enum AgentSummary {
                 quotaRows: quotaRows,
                 perf: perf,
                 models: agentModelRows,
+                othersModel: othersModel,
                 projectShares: projectShares,
-                othersProjectShare: others
+                othersProjectShare: others,
+                antigravityAccountShares: agyAccountShares
             ))
         }
 
@@ -295,6 +304,36 @@ public enum AgentSummary {
             integers[remainders[i].index] += 1
         }
         return integers
+    }
+
+    private static func buildTopModels(
+        _ sortedModels: [ModelCost],
+        perfByModel: [String: PerfSummary],
+        limit: Int = 8
+    ) -> (top: [AgentModelRow], others: AgentModelOthers?) {
+        let top = sortedModels.prefix(limit).map { m in
+            AgentModelRow(
+                model: m.model,
+                agent: m.agent,
+                tokens: m.tokens,
+                cost: m.cost,
+                estimated: m.estimated,
+                cacheHitRate: cacheHitRate(for: m.tokens),
+                perf: perfByModel[m.model]
+            )
+        }
+        let rest = sortedModels.dropFirst(limit)
+        let others: AgentModelOthers?
+        if !rest.isEmpty {
+            others = AgentModelOthers(
+                count: rest.count,
+                tokens: rest.reduce(0) { $0 + $1.tokens.total },
+                cost: rest.reduce(0.0) { $0 + $1.cost }
+            )
+        } else {
+            others = nil
+        }
+        return (top, others)
     }
 
     private static func buildProjectShares(

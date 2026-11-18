@@ -548,8 +548,14 @@
 "agents.detail.models" = "Par modèle";
 "agents.detail.models.hit" = "Cache";
 "agents.detail.models.speed" = "Vitesse";
+"agents.detail.models.others" = "Autres (%d)";
 "agents.detail.where_money_went" = "Répartition par projet";
 "agents.detail.others" = "Autres";
 "agents.detail.no_project_cost" = "Aucun coût de projet sur cette période";
 "agents.detail.open_project_help" = "Ouvrir les détails de %@";
+"agents.detail.by_account" = "Par compte";
+"agents.detail.unattributed" = "Non attribué";
+"overview.agy.as_of" = "au %@";
+"overview.accounts_count" = "%d comptes";
+"settings.plan_none" = "Aucun";
 

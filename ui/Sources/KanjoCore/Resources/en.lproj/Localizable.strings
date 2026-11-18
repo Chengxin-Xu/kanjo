@@ -548,8 +548,14 @@
 "agents.detail.models" = "By model";
 "agents.detail.models.hit" = "Hit";
 "agents.detail.models.speed" = "Speed";
+"agents.detail.models.others" = "Others (%d)";
 "agents.detail.where_money_went" = "Where the money went";
 "agents.detail.others" = "Others";
 "agents.detail.no_project_cost" = "No project cost in this range";
 "agents.detail.open_project_help" = "Open %@ details";
+"agents.detail.by_account" = "By account";
+"agents.detail.unattributed" = "Unattributed";
+"overview.agy.as_of" = "as of %@";
+"overview.accounts_count" = "%d accounts";
+"settings.plan_none" = "None";
 
