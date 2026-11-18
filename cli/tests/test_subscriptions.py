@@ -726,6 +726,23 @@ class SubscriptionTest(unittest.TestCase):
         self.assertEqual(claude["source"], "manual")
         self.assertEqual(claude["account"], {"email": "alice@example.com", "name": "Acme Corp"})
 
+    def test_antigravity_accounts_aggregation_none_handling(self):
+        from kanjo.subscriptions import _aggregate_antigravity_accounts
+        accounts = {
+            "a@test.com": {"plan": "google_ai_pro"},
+            "b@test.com": {"plan": "none"},
+            "c@test.com": {"plan": "google_ai_pro"},
+        }
+        result = _aggregate_antigravity_accounts(accounts)
+        self.assertEqual(result["accounts_priced"], 2)
+        self.assertEqual(result["monthly_price_usd"], 39.98)
+        self.assertEqual(result["plan_label"], "Google AI Pro \u00d72")
+        self.assertEqual(result["plan"], "google_ai_pro")
+        # "none" (any case, even with a price) and empty plans never count.
+        self.assertIsNone(_aggregate_antigravity_accounts({
+            "a@test.com": {"plan": "None", "monthly_price_usd": 5.0}, "b@test.com": {"plan": " "},
+        }))
+
 
 if __name__ == "__main__":
     unittest.main()
