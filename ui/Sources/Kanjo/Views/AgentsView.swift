@@ -21,6 +21,7 @@ enum AgentsRoute {
 /// 悬停在行上方/下方浮出详情卡，点击固定，再次点击行/空白处或按 Esc 收起。
 struct AgentsView: View {
     let report: UsageReport
+    var panelData: PanelData? = nil
     var scrollAnchor: String? = nil
     let onSelectProject: (String) -> Void
 
@@ -32,10 +33,12 @@ struct AgentsView: View {
 
     init(
         report: UsageReport,
+        panelData: PanelData? = nil,
         scrollAnchor: String? = nil,
         onSelectProject: @escaping (String) -> Void
     ) {
         self.report = report
+        self.panelData = panelData
         self.scrollAnchor = scrollAnchor
         self.onSelectProject = onSelectProject
         _pinnedAgent = State(initialValue: AgentsRoute.expandedAgent(in: scrollAnchor))
@@ -45,7 +48,13 @@ struct AgentsView: View {
 
     var body: some View {
         let ctx = RangeContext(report: report, raw: rangeRaw)
-        let filtered = ctx.filtered()
+        let filtered: FilteredReport = {
+            if let pd = panelData, pd.matches(report: report, spec: ctx.spec) {
+                return pd.filteredReport
+            } else {
+                return ctx.filtered()
+            }
+        }()
         let summary = AgentSummary.build(report: report, filtered: filtered, quotaNow: effectiveQuotaNow)
 
         ScrollViewReader { proxy in
