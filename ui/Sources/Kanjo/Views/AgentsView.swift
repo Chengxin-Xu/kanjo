@@ -78,6 +78,8 @@ struct AgentsView: View {
                                 let isPinned = pinnedAgent == row.agent
                                 AgentDetailRow(
                                     row: row,
+                                    report: report,
+                                    rangeRaw: rangeRaw,
                                     currency: cur,
                                     quotaLabelWidth: quotaLabelWidth,
                                     isPinned: isPinned,
@@ -246,10 +248,41 @@ struct AgentsView: View {
     }
 }
 
+struct AgentCopyButton: View {
+    let report: UsageReport
+    let rangeRaw: String
+    let agentId: String
+    let accentColor: Color
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            let hiddenRaw = AppDefaults.store.string(forKey: SettingsKeys.hiddenProjects) ?? ""
+            let hiddenProjects = ProjectPrefs.parse(hiddenRaw)
+            if ShareImage.copy(report: report, rangeRaw: rangeRaw, agentId: agentId, hiddenProjects: hiddenProjects) {
+                copied = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { copied = false }
+            }
+        } label: {
+            Image(systemName: copied ? "checkmark" : "photo.on.rectangle")
+                .font(.system(size: 11))
+                .foregroundColor(copied ? accentColor : .secondary)
+                .frame(width: 22, height: 22)
+                .background(Color.primary.opacity(0.06))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .hoverTip(L10n.tr(copied ? "menu.copied" : "menu.copy_usage_image"))
+    }
+}
+
 // MARK: - 单个 Agent 行 + 浮层详情卡
 
 private struct AgentDetailRow: View {
     let row: AgentSummaryRow
+    let report: UsageReport
+    let rangeRaw: String
     let currency: String
     let quotaLabelWidth: CGFloat
     let isPinned: Bool
@@ -274,6 +307,8 @@ private struct AgentDetailRow: View {
         ) {
             AgentDetailCard(
                 row: row,
+                report: report,
+                rangeRaw: rangeRaw,
                 currency: currency,
                 onSelectProject: { projectId in
                     onDismiss()
@@ -371,15 +406,27 @@ private struct AgentDetailRow: View {
     }
 }
 
-private struct AgentDetailCard: View {
+struct AgentDetailCard: View {
     let row: AgentSummaryRow
+    let report: UsageReport
+    let rangeRaw: String
     let currency: String
+    let forShare: Bool
     let onSelectProject: (String) -> Void
+
+    init(row: AgentSummaryRow, report: UsageReport, rangeRaw: String, currency: String, forShare: Bool = false, onSelectProject: @escaping (String) -> Void = { _ in }) {
+        self.row = row
+        self.report = report
+        self.rangeRaw = rangeRaw
+        self.currency = currency
+        self.forShare = forShare
+        self.onSelectProject = onSelectProject
+    }
 
     private var accentColor: Color { AgentPalette.color(for: row.agent) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        let content = VStack(alignment: .leading, spacing: 9) {
             headerBlock
             tokensBlock
             Divider().opacity(0.45)
@@ -398,7 +445,12 @@ private struct AgentDetailCard: View {
             }
         }
         .monospacedDigit()
-        .hoverCard()
+
+        if forShare {
+            content.environment(\.isShareRender, true)
+        } else {
+            content.hoverCard()
+        }
     }
 
     private var headerBlock: some View {
@@ -413,6 +465,10 @@ private struct AgentDetailCard: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+            }
+            Spacer()
+            if !forShare {
+                AgentCopyButton(report: report, rangeRaw: rangeRaw, agentId: row.agent, accentColor: accentColor)
             }
         }
     }
@@ -635,25 +691,7 @@ private struct AgentDetailCard: View {
             projectProportionBar
             FlowLayout(spacing: 8, lineSpacing: 4) {
                 ForEach(Array(row.projectShares.enumerated()), id: \.element.id) { idx, seg in
-                    Button {
-                        onSelectProject(seg.projectId)
-                    } label: {
-                        HStack(spacing: 4) {
-                            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                                .fill(projectSegmentColor(index: idx))
-                                .frame(width: 6, height: 6)
-                            Text("\(seg.projectName) \(Fmt.percent(seg.share))")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                        }
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1.5)
-                        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Color.primary.opacity(0.05)))
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .hoverTip("\(seg.projectName) · \(Fmt.money(seg.cost, currency: currency)) (\(Fmt.percent(seg.share))) · \(L10n.tr("agents.detail.open_project_help", seg.projectName))")
+                    projectChip(index: idx, seg: seg)
                 }
                 if let others = row.othersProjectShare {
                     HStack(spacing: 4) {
@@ -680,15 +718,7 @@ private struct AgentDetailCard: View {
             let avail = max(geo.size.width - CGFloat(max(segCount - 1, 0)) * gap, 0)
             HStack(spacing: gap) {
                 ForEach(Array(row.projectShares.enumerated()), id: \.element.id) { idx, seg in
-                    Button {
-                        onSelectProject(seg.projectId)
-                    } label: {
-                        Rectangle()
-                            .fill(projectSegmentColor(index: idx))
-                            .frame(width: max(avail * CGFloat(max(seg.share, 0)), 3))
-                    }
-                    .buttonStyle(.plain)
-                    .hoverTip("\(seg.projectName) · \(Fmt.money(seg.cost, currency: currency)) (\(Fmt.percent(seg.share)))")
+                    projectBarSegment(index: idx, seg: seg, avail: avail)
                 }
                 if let others = row.othersProjectShare {
                     Rectangle()
@@ -710,6 +740,52 @@ private struct AgentDetailCard: View {
             .filter { $0 != row.agent }
         let key = paletteKeys[(index - 1) % paletteKeys.count]
         return AgentPalette.color(for: key)
+    }
+
+    private func projectChip(index: Int, seg: AgentProjectShare) -> some View {
+        let label = HStack(spacing: 4) {
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(projectSegmentColor(index: index))
+                .frame(width: 6, height: 6)
+            Text("\(seg.projectName) \(Fmt.percent(seg.share))")
+                .font(.system(size: 10))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 1.5)
+        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Color.primary.opacity(0.05)))
+        .contentShape(Rectangle())
+
+        if forShare {
+            return AnyView(label)
+        } else {
+            return AnyView(Button {
+                onSelectProject(seg.projectId)
+            } label: {
+                label
+            }
+            .buttonStyle(.plain)
+            .hoverTip("\(seg.projectName) · \(Fmt.money(seg.cost, currency: currency)) (\(Fmt.percent(seg.share))) · \(L10n.tr("agents.detail.open_project_help", seg.projectName))"))
+        }
+    }
+
+    private func projectBarSegment(index: Int, seg: AgentProjectShare, avail: CGFloat) -> some View {
+        let rect = Rectangle()
+            .fill(projectSegmentColor(index: index))
+            .frame(width: max(avail * CGFloat(max(seg.share, 0)), 3))
+
+        if forShare {
+            return AnyView(rect)
+        } else {
+            return AnyView(Button {
+                onSelectProject(seg.projectId)
+            } label: {
+                rect
+            }
+            .buttonStyle(.plain)
+            .hoverTip("\(seg.projectName) · \(Fmt.money(seg.cost, currency: currency)) (\(Fmt.percent(seg.share)))"))
+        }
     }
 }
 

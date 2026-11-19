@@ -592,4 +592,27 @@
 "overview.agy.as_of" = "au %@";
 "overview.accounts_count" = "%d comptes";
 "settings.plan_none" = "Aucun";
+"menu.copy_usage_image" = "Copier l'image d'utilisation";
+"menu.copied" = "Copié";
 
+"share.kanjo" = "Kanjo";
+"share.updated" = "Mis à jour";
+"share.total" = "Total";
+"share.top_projects" = "Meilleurs projets";
+"share.cost" = "Coût";
+"share.tokens" = "Jetons";
+"share.cache_hit" = "Taux de cache";
+"share.input" = "Entrée";
+"share.output" = "Sortie";
+"share.cache_read" = "Lecture cache";
+"share.cache_write" = "Écriture cache";
+"share.reasoning" = "Raisonnement";
+"share.agents" = "Agents";
+"share.sessions" = "Sessions";
+"share.updated_format" = "Mis à jour le %@";
+"share.total_suffix_format" = "%@ total";
+"share.agent_subscription_format" = "%@ · %@";
+"share.other_agents" = "Autres agents";
+"share.tokens_sessions" = "%@ jetons · %d sessions";
+"share.projects" = "Projets";
+"share.more_agents" = "+%d autres";

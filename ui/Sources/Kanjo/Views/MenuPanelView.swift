@@ -99,12 +99,14 @@ struct MenuPanelView: View {
     @EnvironmentObject var disk: DiskStore
     @Environment(\.isSnapshotMode) private var isSnapshotMode
     @AppStorage(SettingsKeys.appLanguage, store: AppDefaults.store) private var appLanguage = AppLanguage.system.rawValue
+    @AppStorage(SettingsKeys.timeRange, store: AppDefaults.store) private var rangeRaw = TimeRange.all.rawValue
     @AppStorage(SettingsKeys.appAppearance, store: AppDefaults.store) private var appAppearance = AppAppearance.defaultValue.rawValue
     @AppStorage(SettingsKeys.panelViewMode, store: AppDefaults.store) private var panelViewMode = PanelViewMode.projects.rawValue
     @State private var route: Route = .overview
     @State private var pendingDevRoute = DevRoute.requested
     @State private var overviewAnchor: String?
     @State private var editingSubscriptionAgent: String?
+    @State private var copied: Bool = false
     @State private var footerHeight: CGFloat = 0
     @StateObject private var updates = UpdateController.shared
     var initialRoute: Route? = nil
@@ -377,6 +379,24 @@ struct MenuPanelView: View {
             .buttonStyle(IconButtonStyle())
             .hoverTip(L10n.tr("menu.refresh_now"))
             .disabled(route == .disk ? disk.isLoading : store.isLoading)
+
+            if route == .overview || route == .agents {
+                Button {
+                    let hiddenRaw = AppDefaults.store.string(forKey: SettingsKeys.hiddenProjects) ?? ""
+                    let hiddenProjects = ProjectPrefs.parse(hiddenRaw)
+                    
+                    guard let report = store.report else { return }
+                    
+                    if ShareImage.copy(report: report, rangeRaw: rangeRaw, agentId: nil, hiddenProjects: hiddenProjects) {
+                        copied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { copied = false }
+                    }
+                } label: {
+                    Image(systemName: copied ? "checkmark" : "photo.on.rectangle")
+                }
+                .buttonStyle(IconButtonStyle())
+                .hoverTip(L10n.tr("menu.copy_usage_image"))
+            }
 
             Group {
                 if route == .disk {

@@ -592,4 +592,27 @@
 "overview.agy.as_of" = "as of %@";
 "overview.accounts_count" = "%d accounts";
 "settings.plan_none" = "None";
+"menu.copy_usage_image" = "Copy usage image";
+"menu.copied" = "Copied";
 
+"share.kanjo" = "Kanjo";
+"share.updated" = "Updated";
+"share.total" = "Total";
+"share.top_projects" = "Top Projects";
+"share.cost" = "Cost";
+"share.tokens" = "Tokens";
+"share.cache_hit" = "Cache hit";
+"share.input" = "Input";
+"share.output" = "Output";
+"share.cache_read" = "Cache read";
+"share.cache_write" = "Cache write";
+"share.reasoning" = "Reasoning";
+"share.agents" = "Agents";
+"share.sessions" = "Sessions";
+"share.updated_format" = "Updated %@";
+"share.total_suffix_format" = "%@ total";
+"share.agent_subscription_format" = "%@ · %@";
+"share.other_agents" = "Other agents";
+"share.tokens_sessions" = "%@ tokens · %d sessions";
+"share.projects" = "Projects";
+"share.more_agents" = "+%d more";
